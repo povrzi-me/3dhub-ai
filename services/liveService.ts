@@ -248,8 +248,9 @@ export class LiveSession {
     if (message.toolCall?.functionCalls) {
       for (const fc of message.toolCall.functionCalls) {
         try {
-          const funcName = fc.name;
-          const funcId = fc.id;
+          const funcName = fc.name || "unknown";
+          const funcId = fc.id || "unknown";
+          
           const result = await callbacks.onFunctionCall({ name: funcName, args: fc.args });
           
           this.sessionPromise?.then(session => {
