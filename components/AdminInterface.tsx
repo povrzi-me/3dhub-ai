@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Appointment, CallLog, Service, Language } from '../types';
-import { SERVICES as INITIAL_SERVICES, BUSINESS_NAME, FULL_ADDRESS, SYSTEM_INSTRUCTION } from '../constants';
+import { SERVICES as INITIAL_SERVICES, BUSINESS_NAME, FULL_ADDRESS, GET_SYSTEM_INSTRUCTION } from '../constants';
 
 interface AdminProps {
   appointments: Appointment[];
@@ -12,7 +12,9 @@ interface AdminProps {
     autoCloseDelay: number;
     services?: Service[];
     agentName?: string;
-    voiceProfile?: string;
+    voiceName?: string;
+    voiceSpeed?: number;
+    voiceTone?: number;
   };
 }
 
@@ -21,8 +23,12 @@ const AdminInterface: React.FC<AdminProps> = ({ appointments, callLogs, onSaveSe
   const [showSuccess, setShowSuccess] = useState(false);
   const [closeDelay, setCloseDelay] = useState(currentSettings?.autoCloseDelay || 10);
   const [managedServices, setManagedServices] = useState<Service[]>(currentSettings?.services || INITIAL_SERVICES);
-  const [agentName, setAgentName] = useState(currentSettings?.agentName || "Eva");
-  const [voiceProfile, setVoiceProfile] = useState(currentSettings?.voiceProfile || "Zephyr");
+  
+  // New Agent Settings
+  const [agentName, setAgentName] = useState(currentSettings?.agentName || "Ema");
+  const [voiceName, setVoiceName] = useState(currentSettings?.voiceName || "Fenrir");
+  const [voiceSpeed, setVoiceSpeed] = useState(currentSettings?.voiceSpeed || 1.0);
+  const [voiceTone, setVoiceTone] = useState(currentSettings?.voiceTone || 1.0);
 
   // Stats calculation
   const stats = useMemo(() => {
@@ -53,7 +59,9 @@ const AdminInterface: React.FC<AdminProps> = ({ appointments, callLogs, onSaveSe
       autoCloseDelay: closeDelay,
       services: managedServices,
       agentName,
-      voiceProfile
+      voiceName,
+      voiceSpeed,
+      voiceTone
     });
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
@@ -246,6 +254,91 @@ const AdminInterface: React.FC<AdminProps> = ({ appointments, callLogs, onSaveSe
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* AGENT CONFIGURATION */}
+        <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-6">
+           <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-8 border-b border-slate-50 pb-4">Agent Configuration</h4>
+           <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Agent Name</label>
+                <input 
+                  type="text" 
+                  value={agentName}
+                  onChange={(e) => setAgentName(e.target.value)}
+                  className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-900 shadow-inner focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                  placeholder="e.g. Ema"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Voice Persona</label>
+                <div className="relative">
+                  <select 
+                    value={voiceName}
+                    onChange={(e) => setVoiceName(e.target.value)}
+                    className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-900 shadow-inner appearance-none focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                  >
+                    <option value="Fenrir">Fenrir (Male, Deep)</option>
+                    <option value="Zephyr">Zephyr (Female, Balanced)</option>
+                    <option value="Puck">Puck (Male, Energetic)</option>
+                    <option value="Charon">Charon (Male, Deep)</option>
+                    <option value="Kore">Kore (Female, Soft)</option>
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                 <div className="space-y-3">
+                    <div className="flex justify-between">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Speed</label>
+                       <span className="text-[10px] font-bold text-indigo-600">{voiceSpeed}x</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0.5" 
+                      max="2.0" 
+                      step="0.1"
+                      value={voiceSpeed}
+                      onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                      className="w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                 </div>
+                 <div className="space-y-3">
+                    <div className="flex justify-between">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tone</label>
+                       <span className="text-[10px] font-bold text-indigo-600">{voiceTone.toFixed(1)}</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0.5" 
+                      max="2.0" 
+                      step="0.1"
+                      value={voiceTone}
+                      onChange={(e) => setVoiceTone(parseFloat(e.target.value))}
+                      className="w-full accent-indigo-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                    />
+                 </div>
+              </div>
+
+              {/* SYSTEM INSTRUCTIONS PREVIEW */}
+              <div className="space-y-2 mt-6 pt-6 border-t border-slate-100">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Current System Instructions & Flow</label>
+                <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 relative group">
+                  <pre className="text-[10px] text-slate-300 font-mono whitespace-pre-wrap h-64 overflow-y-auto custom-scrollbar">
+                    {GET_SYSTEM_INSTRUCTION(agentName)}
+                  </pre>
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[9px] bg-indigo-600 text-white px-2 py-1 rounded font-bold">Read Only</span>
+                  </div>
+                </div>
+              </div>
+           </div>
+        </div>
+
+        {/* COMPANY DETAILS */}
         <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm space-y-6">
           <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-8 border-b border-slate-50 pb-4">Company Details</h4>
           <div className="space-y-4">
@@ -330,15 +423,6 @@ const AdminInterface: React.FC<AdminProps> = ({ appointments, callLogs, onSaveSe
           </div>
         </div>
 
-        <div className="bg-white p-10 rounded-[3rem] border border-slate-100 shadow-sm lg:col-span-2 space-y-6">
-          <h4 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-8 border-b border-slate-50 pb-4">AI Logic</h4>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">System Prompt</label>
-              <textarea defaultValue={SYSTEM_INSTRUCTION} className="w-full p-6 bg-slate-50 rounded-3xl border-none font-mono text-xs font-bold text-slate-600 shadow-inner min-h-[300px]" />
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

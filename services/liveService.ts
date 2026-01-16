@@ -6,75 +6,68 @@ import { SYSTEM_INSTRUCTION } from "../constants";
 // Define tools available to the model
 const TOOLS: FunctionDeclaration[] = [
   {
-    name: 'check_product_stock',
-    description: "Check the stock status and price of a product in the inventory.",
+    name: 'submit_report',
+    description: 'Universal backend action tool. Use this for checking stock (GET_PRODUCT_STOCK), adding to waitlist (WAITLIST_ADD), special requests (SPECIAL_REQUEST), and call summaries (CALL_SUMMARY).',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        query: { type: Type.STRING, description: "Name of the product or brand to check" }
+        report_type: { 
+          type: Type.STRING, 
+          enum: ['GET_PRODUCT_STOCK', 'WAITLIST_ADD', 'SPECIAL_REQUEST', 'CALL_SUMMARY'] 
+        },
+        // Nested objects for complex reports
+        contact: {
+            type: Type.OBJECT,
+            properties: {
+                name: { type: Type.STRING },
+                phone: { type: Type.STRING },
+                email: { type: Type.STRING }
+            }
+        },
+        product: {
+            type: Type.OBJECT,
+            properties: {
+                name: { type: Type.STRING },
+                sku: { type: Type.STRING },
+                stock_status: { type: Type.STRING }
+            }
+        },
+        // Flat fields compatibility for CALL_SUMMARY or flat structure
+        customer_name: { type: Type.STRING },
+        phone: { type: Type.STRING },
+        email: { type: Type.STRING },
+        product_name: { type: Type.STRING },
+        product_sku: { type: Type.STRING },
+        stock_status: { type: Type.STRING },
+        
+        // Common fields
+        notes: { type: Type.STRING },
+        request_type: { type: Type.STRING },
+        calendar_event_id: { type: Type.STRING },
+        callback_date: { type: Type.STRING },
+        callback_time: { type: Type.STRING },
+        status: { type: Type.STRING }
       },
-      required: ['query']
+      required: ['report_type']
     }
   },
   {
     name: 'update_order_ui',
-    description: 'Call this tool to update the fields on the visible user form when user provides name, contact, or service details. Do this incrementally as you collect info.',
+    description: 'Update the user visible form. Optional.',
     parameters: {
       type: Type.OBJECT,
       properties: {
         name: { type: Type.STRING },
         phone: { type: Type.STRING },
         email: { type: Type.STRING },
-        serviceName: { type: Type.STRING, description: "Product name or subject of inquiry" },
-        comments: { type: Type.STRING, description: "Notes, address, or message content" }
+        serviceName: { type: Type.STRING },
+        comments: { type: Type.STRING }
       }
     }
   },
   {
-    name: 'submit_report',
-    description: 'Submit a structured report to the backend system. Must follow strict FLAT schema and enum values.',
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        report_type: { 
-          type: Type.STRING, 
-          enum: ['PRODUCT_INQUIRY', 'STOCK_CHECK', 'WAITLIST_REQUEST', 'SPECIAL_REQUEST', 'CALL_SUMMARY'] 
-        },
-        customer_name: { type: Type.STRING },
-        phone: { type: Type.STRING },
-        email: { type: Type.STRING },
-        product_name: { type: Type.STRING },
-        product_sku: { type: Type.STRING },
-        stock_status: { 
-          type: Type.STRING,
-          enum: ['in_stock', 'out_of_stock', 'unknown']
-        },
-        request_type: { type: Type.STRING },
-        notes: { type: Type.STRING },
-        calendar_event_id: { type: Type.STRING },
-        status: { 
-          type: Type.STRING,
-          enum: ['completed', 'pending', 'sent_to_owner', 'not_confirmed']
-        }
-      },
-      required: [
-        'report_type', 
-        'customer_name', 
-        'phone', 
-        'email', 
-        'product_name', 
-        'product_sku', 
-        'stock_status', 
-        'request_type', 
-        'notes', 
-        'calendar_event_id', 
-        'status'
-      ]
-    }
-  },
-  {
     name: 'close_call',
-    description: 'Ends the call session. Use only when user says they have no more questions or after sending CALL_SUMMARY.',
+    description: 'Ends the call session.',
     parameters: {
       type: Type.OBJECT,
       properties: {}
@@ -86,6 +79,11 @@ export interface LiveSessionCallbacks {
   onMessage: (text: string, type: 'input' | 'output') => void;
   onClose: () => void;
   onFunctionCall: (functionCall: { name: string, args: any }) => Promise<any>;
+}
+
+export interface LiveSessionConfig {
+  voiceName?: string;
+  systemInstruction?: string;
 }
 
 export class LiveSession {
@@ -103,7 +101,7 @@ export class LiveSession {
   private sources = new Set<AudioBufferSourceNode>();
   private activeTurnId = 0;
 
-  async connect(callbacks: LiveSessionCallbacks) {
+  async connect(callbacks: LiveSessionCallbacks, config?: LiveSessionConfig) {
     // @ts-ignore
     const apiKey = process.env.API_KEY; 
 
@@ -122,6 +120,9 @@ export class LiveSession {
     this.sessionReady = false;
     this.activeTurnId = 0;
     this.sources.clear();
+
+    const voiceName = config?.voiceName || 'Fenrir';
+    const systemInstruction = config?.systemInstruction || SYSTEM_INSTRUCTION;
 
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -149,9 +150,9 @@ export class LiveSession {
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } }
+            voiceConfig: { prebuiltVoiceConfig: { voiceName } }
           },
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: systemInstruction,
           tools: [{ functionDeclarations: TOOLS }],
         }
       });

@@ -2,78 +2,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LiveSession } from '../services/liveService';
 import { Appointment, Language, CallLog } from '../types';
-import { SERVICES } from '../constants';
+import { SERVICES, GET_SYSTEM_INSTRUCTION } from '../constants';
 
 const WEBHOOK_URL = "https://3dhub-ai.povrzi-me.workers.dev";
-
-const UI_TRANSLATIONS = {
-  [Language.MK]: {
-    confirmedTitle: "БАРАЊЕТО Е ПОТВРДЕНО",
-    confirmedDesc: "Деталите за вашето барање се подолу:",
-    doneBtn: "ЗАТВОРИ",
-    agentTitle: "EMA > AI_CORE",
-    statusActive: "ONLINE",
-    statusReady: "STANDBY",
-    startPrompt: "Иницијализирај го 3DHub Системот...",
-    stopBtn: "ABORT",
-    startBtn: "INITIALIZE",
-    formTitle: "ПРОВЕРКА НА ПОДАТОЦИ",
-    formSubtitle: "Се ажурира во реално време...",
-    labelName: "Име",
-    labelPhone: "Телефон",
-    labelEmail: "Е-маил",
-    labelService: "Предмет",
-    labelVehicle: "Забелешка",
-    statusListening: "INPUT...",
-    statusSpeaking: "PROCESSING...",
-    tempBed: "BED",
-    tempNozzle: "NOZZLE"
-  },
-  [Language.SQ]: {
-    confirmedTitle: "KËRKESA U KONFIRMUA",
-    confirmedDesc: "Detajet e kërkesës suaj janë më poshtë:",
-    doneBtn: "MBYLL",
-    agentTitle: "EMA > AI_CORE",
-    statusActive: "ONLINE",
-    statusReady: "STANDBY",
-    startPrompt: "Inicializo Sistemin 3DHub...",
-    stopBtn: "ABORT",
-    startBtn: "INITIALIZE",
-    formTitle: "VERIFIKIMI I TË DHËNAVE",
-    formSubtitle: "Po përditësohet në kohë reale...",
-    labelName: "Emri",
-    labelPhone: "Telefoni",
-    labelEmail: "Email",
-    labelService: "Lënda",
-    labelVehicle: "Shënim",
-    statusListening: "INPUT...",
-    statusSpeaking: "PROCESSING...",
-    tempBed: "BED",
-    tempNozzle: "NOZZLE"
-  },
-  [Language.EN]: {
-    confirmedTitle: "REQUEST CONFIRMED",
-    confirmedDesc: "Your request details are below:",
-    doneBtn: "CLOSE",
-    agentTitle: "EMA > AI_CORE",
-    statusActive: "ONLINE",
-    statusReady: "STANDBY",
-    startPrompt: "Initialize 3DHub System...",
-    stopBtn: "ABORT",
-    startBtn: "INITIALIZE",
-    formTitle: "DATA VERIFICATION",
-    formSubtitle: "Updating in real-time...",
-    labelName: "Name",
-    labelPhone: "Phone",
-    labelEmail: "Email",
-    labelService: "Subject",
-    labelVehicle: "Message",
-    statusListening: "INPUT...",
-    statusSpeaking: "PROCESSING...",
-    tempBed: "BED",
-    tempNozzle: "NOZZLE"
-  }
-};
 
 interface VoiceProps {
   onNewAppointment: (apt: Appointment) => void;
@@ -82,6 +13,10 @@ interface VoiceProps {
   onSessionStarted?: () => void;
   autoCloseDelay?: number;
   currentLang: Language;
+  agentName?: string;
+  voiceName?: string;
+  voiceSpeed?: number;
+  voiceTone?: number;
 }
 
 const VoiceInterface: React.FC<VoiceProps> = ({ 
@@ -90,7 +25,11 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   onCallEnded, 
   onSessionStarted,
   autoCloseDelay = 10,
-  currentLang
+  currentLang,
+  agentName = "Hubby",
+  voiceName = "Fenrir",
+  voiceSpeed,
+  voiceTone
 }) => {
   const [isActive, setIsActive] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -117,6 +56,78 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   const silenceWarningSentRef = useRef(false);
   const speakingTimeoutRef = useRef<any>(null);
   
+  const UI_TRANSLATIONS = {
+  [Language.MK]: {
+    confirmedTitle: "БАРАЊЕТО Е ПОТВРДЕНО",
+    confirmedDesc: "Деталите за вашето барање се подолу:",
+    doneBtn: "ЗАТВОРИ",
+    agentTitle: `${agentName.toUpperCase()} > AI_CORE`,
+    statusActive: "ONLINE",
+    statusReady: "STANDBY",
+    startPrompt: "Иницијализирај го 3DHub Системот...",
+    stopBtn: "ABORT",
+    startBtn: "INITIALIZE",
+    formTitle: "ПРОВЕРКА НА ПОДАТОЦИ",
+    formSubtitle: "Се ажурира во реално време...",
+    labelName: "Име",
+    labelPhone: "Телефон",
+    labelEmail: "Е-маил",
+    labelService: "Предмет",
+    labelVehicle: "Забелешка",
+    statusListening: "INPUT...",
+    statusSpeaking: "PROCESSING...",
+    tempBed: "BED",
+    tempNozzle: "NOZZLE",
+    confirmBtn: "ПОТВРДИ БАРАЊЕ"
+  },
+  [Language.SQ]: {
+    confirmedTitle: "KËRKESA U KONFIRMUA",
+    confirmedDesc: "Detajet e kërkesës suaj janë më poshtë:",
+    doneBtn: "MBYLL",
+    agentTitle: `${agentName.toUpperCase()} > AI_CORE`,
+    statusActive: "ONLINE",
+    statusReady: "STANDBY",
+    startPrompt: "Inicializo Sistemin 3DHub...",
+    stopBtn: "ABORT",
+    startBtn: "INITIALIZE",
+    formTitle: "VERIFIKIMI I TË DHËNAVE",
+    formSubtitle: "Po përditësohet në kohë reale...",
+    labelName: "Emri",
+    labelPhone: "Telefoni",
+    labelEmail: "Email",
+    labelService: "Lënda",
+    labelVehicle: "Shënim",
+    statusListening: "INPUT...",
+    statusSpeaking: "PROCESSING...",
+    tempBed: "BED",
+    tempNozzle: "NOZZLE",
+    confirmBtn: "KONFIRMO KËRKESËN"
+  },
+  [Language.EN]: {
+    confirmedTitle: "REQUEST CONFIRMED",
+    confirmedDesc: "Your request details are below:",
+    doneBtn: "CLOSE",
+    agentTitle: `${agentName.toUpperCase()} > AI_CORE`,
+    statusActive: "ONLINE",
+    statusReady: "STANDBY",
+    startPrompt: "Initialize 3DHub System...",
+    stopBtn: "ABORT",
+    startBtn: "INITIALIZE",
+    formTitle: "DATA VERIFICATION",
+    formSubtitle: "Updating in real-time...",
+    labelName: "Name",
+    labelPhone: "Phone",
+    labelEmail: "Email",
+    labelService: "Subject",
+    labelVehicle: "Message",
+    statusListening: "INPUT...",
+    statusSpeaking: "PROCESSING...",
+    tempBed: "BED",
+    tempNozzle: "NOZZLE",
+    confirmBtn: "CONFIRM REQUEST"
+  }
+};
+
   const t = UI_TRANSLATIONS[currentLang];
 
   const formDataRef = useRef(formData);
@@ -234,7 +245,16 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   };
 
   const submitReport = async (args: any) => {
-    // args now match the flat JSON structure directly
+    // Flatten the args from nested structures (contact/product) to flat state
+    const updatedFormData = {
+      name: args.contact?.name || args.customer_name || formDataRef.current.name,
+      phone: args.contact?.phone || args.phone || formDataRef.current.phone,
+      email: args.contact?.email || args.email || formDataRef.current.email,
+      serviceName: args.product?.name || args.product_name || args.report_type,
+      comments: args.notes || ""
+    };
+
+    // 1. Send the webhook immediately
     try {
       await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -246,18 +266,11 @@ const VoiceInterface: React.FC<VoiceProps> = ({
       console.error("Webhook failed", e);
     }
 
-    // Sync formData just in case the report has new info
-    const updatedFormData = {
-      name: args.customer_name || formDataRef.current.name,
-      phone: args.phone || formDataRef.current.phone,
-      email: args.email || formDataRef.current.email,
-      serviceName: args.product_name || args.report_type,
-      comments: args.notes || ""
-    };
+    // 2. Update local form data
     setFormData(updatedFormData);
 
-    // Only update UI status/close form if it's a transactional report or final summary
-    const isTransactional = args.report_type === 'WAITLIST_REQUEST' || args.report_type === 'SPECIAL_REQUEST';
+    // 3. Update UI status to "Confirmed" if it's a transactional report
+    const isTransactional = args.report_type === 'WAITLIST_ADD' || args.report_type === 'SPECIAL_REQUEST';
     
     if (isTransactional) {
         const finalStatus = 'confirmed';
@@ -267,10 +280,10 @@ const VoiceInterface: React.FC<VoiceProps> = ({
           id: Math.random().toString(36).substr(2, 9),
           customerName: updatedFormData.name || "Unknown",
           customerPhone: updatedFormData.phone || "---",
-          serviceId: args.product_sku || args.report_type,
+          serviceId: args.product?.sku || args.product_sku || args.report_type,
           serviceName: updatedFormData.serviceName,
-          date: new Date().toISOString().split('T')[0],
-          time: new Date().toLocaleTimeString(),
+          date: args.callback_date || new Date().toISOString().split('T')[0],
+          time: args.callback_time || new Date().toLocaleTimeString(),
           status: finalStatus,
           language: currentLang,
           createdAt: Date.now(),
@@ -278,12 +291,24 @@ const VoiceInterface: React.FC<VoiceProps> = ({
         };
         onNewAppointment(newApt);
         
-        // Show confirmation overlay
-        setFinalSummary(args);
+        // Show confirmation overlay.
+        const summaryData = {
+            ...args,
+            customer_name: updatedFormData.name,
+            phone: updatedFormData.phone,
+            email: updatedFormData.email,
+            product_name: updatedFormData.serviceName,
+            notes: updatedFormData.comments
+        };
+        setFinalSummary(summaryData);
     } 
-    // For PRODUCT_INQUIRY and STOCK_CHECK, we just log and update the form data but don't close the UI.
     
     return { status: "report_submitted_successfully" };
+  };
+
+  const handleManualConfirm = () => {
+    // Send a system message to the agent that the user confirmed on screen
+    sessionRef.current?.sendText(`[System: User clicked CONFIRM_REQUEST button. Form Data: Name=${formData.name}, Phone=${formData.phone}, Product=${formData.serviceName}. Proceed to submit_report.]`);
   };
 
   const startSession = async () => {
@@ -304,6 +329,8 @@ const VoiceInterface: React.FC<VoiceProps> = ({
       const session = new LiveSession();
       sessionRef.current = session;
       
+      const systemInstruction = GET_SYSTEM_INSTRUCTION(agentName);
+
       await session.connect({
         onMessage: (text, type) => {
           resetSilenceTimer();
@@ -331,8 +358,13 @@ const VoiceInterface: React.FC<VoiceProps> = ({
         onFunctionCall: async (fc) => {
           resetSilenceTimer();
           
-          if (fc.name === 'check_product_stock') {
-            return await handleProductStockCheck(fc.args);
+          if (fc.name === 'submit_report') {
+             // Handle GET_PRODUCT_STOCK specifically to return data
+             if (fc.args.report_type === 'GET_PRODUCT_STOCK') {
+                 const query = fc.args.product?.name || fc.args.product_name || fc.args.query || "";
+                 return await handleProductStockCheck({ query });
+             }
+             return await submitReport(fc.args);
           }
           
           if (fc.name === 'update_order_ui') {
@@ -342,20 +374,20 @@ const VoiceInterface: React.FC<VoiceProps> = ({
             return { status: "form_updated" };
           }
           
-          if (fc.name === 'submit_report') {
-             return await submitReport(fc.args);
-          }
-
           if (fc.name === 'close_call') {
+            // Disconnect but keep finalSummary visible if it exists
             setTimeout(() => {
                if (sessionRef.current) sessionRef.current.disconnect();
                setIsActive(false);
-            }, 2000);
+            }, 1000);
             return { status: "closing" };
           }
 
           return { status: "unknown_tool" };
         }
+      }, {
+        voiceName: voiceName,
+        systemInstruction: systemInstruction
       });
       
       setIsActive(true);
@@ -385,6 +417,9 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [transcripts]);
+
+  // Determine if confirm button should be shown
+  const canConfirm = isActive && !finalSummary && formData.name.length > 2 && formData.phone.length > 5;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 pt-20">
@@ -529,6 +564,21 @@ const VoiceInterface: React.FC<VoiceProps> = ({
                            <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelVehicle}</label>
                            <div className={`bg-zinc-950 border p-2 rounded text-zinc-400 text-[9px] min-h-[50px] ${formData.comments ? 'border-indigo-500/50 text-zinc-300' : 'border-zinc-800'}`}>{formData.comments || "..."}</div>
                        </div>
+
+                       {/* CONFIRMATION BUTTON - Only shows if data is present and call is active */}
+                       {canConfirm && (
+                         <div className="pt-2 animate-in fade-in duration-500">
+                           <button 
+                             onClick={handleManualConfirm}
+                             className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/40 border border-indigo-500 active:scale-95 transition-all flex items-center justify-center gap-2"
+                           >
+                             <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                             </svg>
+                             {t.confirmBtn}
+                           </button>
+                         </div>
+                       )}
                     </div>
 
                     {/* MINI TRANSCRIPT LOG AT BOTTOM */}

@@ -13,7 +13,11 @@ const App: React.FC = () => {
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
   const [currentLang, setCurrentLang] = useState<Language>(Language.MK);
   const [settings, setSettings] = useState({
-    autoCloseDelay: 10
+    autoCloseDelay: 10,
+    agentName: "Hubby",
+    voiceName: "Fenrir",
+    voiceSpeed: 1.0,
+    voiceTone: 1.0
   });
 
   // Load data from local storage
@@ -24,7 +28,7 @@ const App: React.FC = () => {
     
     if (savedApts) setAppointments(JSON.parse(savedApts));
     if (savedLogs) setCallLogs(JSON.parse(savedLogs));
-    if (savedSettings) setSettings(JSON.parse(savedSettings));
+    if (savedSettings) setSettings({ ...settings, ...JSON.parse(savedSettings) });
   }, []);
 
   const handleNewAppointment = (apt: Appointment) => {
@@ -77,6 +81,10 @@ const App: React.FC = () => {
             onCallEnded={handleNewCallLog}
             autoCloseDelay={settings.autoCloseDelay}
             currentLang={currentLang}
+            agentName={settings.agentName}
+            voiceName={settings.voiceName}
+            voiceSpeed={settings.voiceSpeed}
+            voiceTone={settings.voiceTone}
           />
         )}
         {activeTab === 'admin' && (
