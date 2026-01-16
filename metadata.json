@@ -1,0 +1,7 @@
+{
+  "name": "!3DHub AI v1.1 - Deployed!",
+  "description": "Smart AI assistant for 3DHub.mk - 3D Printers, Filaments, and Services. Features stock checking and order requests.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
