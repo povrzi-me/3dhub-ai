@@ -463,8 +463,8 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   const canConfirm = isActive && !finalSummary && formData.name.length > 2 && formData.phone.length > 5;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 pt-20">
-      {/* COMPACT 3D PRINTER UI CONTAINER */}
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 pt-20">
+      {/* COMPACT 3D PRINTER UI CONTAINER (DARK THEME) */}
       <div className="relative w-full max-w-2xl bg-zinc-900 rounded-xl border-4 border-zinc-800 shadow-2xl flex flex-col overflow-hidden font-mono h-[480px]">
         
         {/* HEADER BAR */}
@@ -493,27 +493,21 @@ const VoiceInterface: React.FC<VoiceProps> = ({
            {/* LEFT: VISUALIZER / INFO */}
            <div className="w-1/2 p-4 flex flex-col items-center justify-center border-r border-zinc-800 bg-zinc-900/50 relative">
               
-              {/* Spinning Ring Visualizer - Compact */}
-              <div className="relative w-40 h-40 flex items-center justify-center mb-4">
-                 {isActive ? (
-                    <>
-                     {/* Dynamic border based on volume */}
-                     <div 
-                        className={`absolute inset-0 rounded-full border-[3px] border-t-indigo-500 border-r-transparent border-b-zinc-800 border-l-transparent ${agentState === 'speaking' ? 'animate-spin duration-700' : 'animate-spin duration-[3000ms]'}`}
-                        style={{ transform: `scale(${1 + audioLevel * 3})` }}
-                     ></div>
-                     <div className={`w-28 h-28 rounded-full bg-zinc-950 flex items-center justify-center border border-zinc-800 shadow-inner ${agentState === 'speaking' ? 'shadow-indigo-500/50' : ''}`}>
-                        <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${agentState === 'speaking' ? 'bg-indigo-600 scale-110' : 'bg-zinc-800 scale-100'}`}>
-                           <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                           </svg>
-                        </div>
-                     </div>
-                    </>
-                 ) : (
-                    <div className="w-24 h-24 border-2 border-dashed border-zinc-600 rounded-full flex items-center justify-center">
-                        <span className="text-2xl opacity-50">⚡</span>
-                    </div>
+              {/* 3D Printer Simulation GIF */}
+              <div className="relative w-48 h-48 flex items-center justify-center mb-4">
+                 <img 
+                   src="https://media.giphy.com/media/l2JhwdnrGvfnoXrzi/giphy.gif" 
+                   alt="3D Printer Simulation" 
+                   className={`w-full h-full object-contain mix-blend-screen transition-all duration-500 ${!isActive ? 'grayscale opacity-40' : 'grayscale-0 opacity-100'}`}
+                 />
+                 
+                 {/* Optional: Simple status dot overlay */}
+                 {isActive && (
+                   <div className="absolute bottom-2 right-2 flex gap-1">
+                     <div className={`w-2 h-2 rounded-full ${agentState === 'speaking' ? 'bg-indigo-500 animate-bounce' : 'bg-zinc-700'}`}></div>
+                     <div className={`w-2 h-2 rounded-full ${agentState === 'speaking' ? 'bg-indigo-500 animate-bounce delay-75' : 'bg-zinc-700'}`}></div>
+                     <div className={`w-2 h-2 rounded-full ${agentState === 'speaking' ? 'bg-indigo-500 animate-bounce delay-150' : 'bg-zinc-700'}`}></div>
+                   </div>
                  )}
               </div>
 
