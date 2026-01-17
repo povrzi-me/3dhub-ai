@@ -79,6 +79,7 @@ export interface LiveSessionCallbacks {
   onMessage: (text: string, type: 'input' | 'output') => void;
   onClose: () => void;
   onFunctionCall: (functionCall: { name: string, args: any }) => Promise<any>;
+  onVolume?: (level: number) => void;
 }
 
 export interface LiveSessionConfig {
@@ -125,7 +126,15 @@ export class LiveSession {
     const systemInstruction = config?.systemInstruction || SYSTEM_INSTRUCTION;
 
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Explicitly enable Echo Cancellation and Noise Suppression to prevent self-interruption
+      this.stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1
+        } 
+      });
       
       this.sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -133,7 +142,7 @@ export class LiveSession {
           onopen: () => {
             console.log("3DHub AI Session Opened");
             this.sessionReady = true;
-            this.startAudioInput();
+            this.startAudioInput(callbacks);
           },
           onmessage: async (message: LiveServerMessage) => {
             await this.handleMessage(message, callbacks);
@@ -163,13 +172,12 @@ export class LiveSession {
     }
   }
 
-  private isUserSpeaking(buffer: Float32Array): boolean {
+  private calculateRMS(buffer: Float32Array): number {
     let sum = 0;
     for (let i = 0; i < buffer.length; i++) {
       sum += buffer[i] * buffer[i];
     }
-    const rms = Math.sqrt(sum / buffer.length);
-    return rms > 0.02; // Threshold
+    return Math.sqrt(sum / buffer.length);
   }
 
   private hardStopAudio() {
@@ -182,7 +190,7 @@ export class LiveSession {
     this.nextStartTime = 0;
   }
 
-  private startAudioInput() {
+  private startAudioInput(callbacks: LiveSessionCallbacks) {
     if (!this.audioContext || !this.stream) return;
     
     this.source = this.audioContext.createMediaStreamSource(this.stream);
@@ -191,12 +199,19 @@ export class LiveSession {
     this.processor.onaudioprocess = (e) => {
       if (this.sessionClosed) return;
       const inputData = e.inputBuffer.getChannelData(0);
+      const rms = this.calculateRMS(inputData);
+
+      // Report volume level for UI visualizers and silence tracking
+      callbacks.onVolume?.(rms);
 
       // Barge-in Detection
-      if (this.isUserSpeaking(inputData)) {
+      // Threshold increased to 0.1 to prevent background noise or echo from cutting off the agent
+      if (rms > 0.1) {
         this.hardStopAudio();
         this.activeTurnId++;
         
+        // Optional: Send interrupt signal, though the audio stream usually triggers it on the server side
+        // keeping it here for responsiveness
         this.sessionPromise?.then(session => {
            (session as any).sendRealtimeInput({ interrupt: true });
         });
@@ -224,6 +239,7 @@ export class LiveSession {
         const audioBytes = decode(audioData);
         const audioBuffer = await decodePcmData(audioBytes, this.outputAudioContext, 24000, 1);
         
+        // Discard if a new turn started (barge-in happened)
         if (turnIdAtStart !== this.activeTurnId) return;
 
         this.nextStartTime = Math.max(this.nextStartTime, this.outputAudioContext.currentTime);

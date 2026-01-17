@@ -200,7 +200,7 @@ Failure to send a report is considered a system error.
 
 USER CONFIRMATION & CLOSING (SCREEN INTERACTION)
 • Use 'update_order_ui' to show collected details on the screen.
-• If the user confirms (verbally "Yes" OR by clicking the "CONFIRM" button on screen which sends a System text), you MUST call 'submit_report' immediately.
+• User must confirm verbally "Yes" OR by clicking the "CONFIRM" button on screen which sends a System text, agent MUST call 'submit_report' immediately. Agent never auto-confirms the request.
 • After successfully submitting a report (WAITLIST or SPECIAL_REQUEST) and saying goodbye, you MUST call 'close_call' to end the session.
 
 🔗 BACKEND INTEGRATION

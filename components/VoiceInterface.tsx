@@ -36,9 +36,12 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   const [transcripts, setTranscripts] = useState<{ text: string; type: 'input' | 'output' }[]>([]);
   // finalSummary will now store the full flat JSON object
   const [finalSummary, setFinalSummary] = useState<any | null>(null);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [activeView, setActiveView] = useState<'form' | 'debug'>('form');
   
   const [duration, setDuration] = useState(0);
   const [agentState, setAgentState] = useState<'listening' | 'speaking' | 'idle'>('idle');
+  const [audioLevel, setAudioLevel] = useState(0);
 
   // Simulated Printer Temps
   const [bedTemp, setBedTemp] = useState(25);
@@ -137,11 +140,18 @@ const VoiceInterface: React.FC<VoiceProps> = ({
 
   const sessionRef = useRef<LiveSession | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const debugScrollRef = useRef<HTMLDivElement>(null);
   const callStartTimeRef = useRef(0);
   
   const bookingStatusRef = useRef<'confirmed' | 'pending' | 'none'>('none');
   const callStatusRef = useRef<'completed' | 'abandoned' | 'failed'>('completed');
   const transcriptsRef = useRef<{ text: string; type: 'input' | 'output' }[]>([]);
+
+  // Helper for debug logging
+  const addLog = (msg: string) => {
+    const time = new Date().toISOString().split('T')[1].slice(0, 8);
+    setDebugLogs(prev => [`[${time}] ${msg}`, ...prev]);
+  };
 
   // Printer Temp Simulation
   useEffect(() => {
@@ -189,10 +199,12 @@ const VoiceInterface: React.FC<VoiceProps> = ({
     const checkSilence = () => {
       const now = Date.now();
       const elapsed = (now - lastActivityTimeRef.current) / 1000;
-      if (elapsed >= 15) {
-        sessionRef.current?.sendText("[SYSTEM: User silent for 15s. Ask if they are there.]");
-        lastActivityTimeRef.current = now; 
-        silenceWarningSentRef.current = false;
+      
+      // Increased timeout to 45 seconds to be less annoying
+      if (elapsed >= 45 && !silenceWarningSentRef.current) {
+        addLog("User silent > 45s. Sending nudge.");
+        sessionRef.current?.sendText("[SYSTEM: User silent for 45s. Ask if they are there.]");
+        silenceWarningSentRef.current = true;
       }
     };
     const interval = window.setInterval(checkSilence, 1000);
@@ -212,10 +224,12 @@ const VoiceInterface: React.FC<VoiceProps> = ({
       transcripts: transcriptsRef.current
     };
     onCallEnded?.(log);
+    addLog(`Call finalized. Duration: ${Math.round(duration)}s`);
   };
 
   const handleProductStockCheck = async (args: any) => {
     const query = (args.query || "").toLowerCase();
+    addLog(`Checking stock for: ${query}`);
     
     // Improved search logic matching the new Knowledge Base structure
     const matchedProducts = SERVICES.filter(s => 
@@ -227,6 +241,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
 
     if (matchedProducts.length > 0) {
       const product = matchedProducts[0];
+      addLog(`Product found: ${product.name}`);
       return {
         found: true,
         product: product.name,
@@ -237,6 +252,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
         tech_specs: product.specs
       };
     } else {
+      addLog(`Product NOT found: ${query}`);
       return {
         found: false,
         message: "Product not found in local catalog."
@@ -245,6 +261,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   };
 
   const submitReport = async (args: any) => {
+    addLog(`[WEBHOOK] Submitting ${args.report_type}...`);
     // Flatten the args from nested structures (contact/product) to flat state
     const updatedFormData = {
       name: args.contact?.name || args.customer_name || formDataRef.current.name,
@@ -256,13 +273,15 @@ const VoiceInterface: React.FC<VoiceProps> = ({
 
     // 1. Send the webhook immediately
     try {
-      await fetch(WEBHOOK_URL, {
+      // NOTE: Removed 'no-cors' to ensure Content-Type is sent correctly
+      const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(args)
       });
+      addLog(`[WEBHOOK] Status: ${response.status}`);
     } catch (e) {
+      addLog(`[WEBHOOK] Error: ${e}`);
       console.error("Webhook failed", e);
     }
 
@@ -273,6 +292,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
     const isTransactional = args.report_type === 'WAITLIST_ADD' || args.report_type === 'SPECIAL_REQUEST';
     
     if (isTransactional) {
+        addLog("Transaction confirmed via report.");
         const finalStatus = 'confirmed';
         bookingStatusRef.current = finalStatus;
 
@@ -307,6 +327,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
   };
 
   const handleManualConfirm = () => {
+    addLog("[UI] User clicked CONFIRM button.");
     // Send a system message to the agent that the user confirmed on screen
     sessionRef.current?.sendText(`[System: User clicked CONFIRM_REQUEST button. Form Data: Name=${formData.name}, Phone=${formData.phone}, Product=${formData.serviceName}. Proceed to submit_report.]`);
   };
@@ -320,6 +341,8 @@ const VoiceInterface: React.FC<VoiceProps> = ({
       setFinalSummary(null);
       setFormData({ name: "", phone: "", email: "", serviceName: "", comments: "" });
       setTranscripts([]);
+      setDebugLogs([]);
+      addLog("Starting session initialization...");
       transcriptsRef.current = [];
       bookingStatusRef.current = 'none';
       callStatusRef.current = 'completed';
@@ -339,6 +362,9 @@ const VoiceInterface: React.FC<VoiceProps> = ({
             transcriptsRef.current = updated;
             return updated;
           });
+          // Log only output to avoid spamming user input echo
+          if (type === 'output') addLog(`[AI] ${text.substring(0, 50)}...`);
+          
           if (type === 'output') {
             setAgentState('speaking');
             if (speakingTimeoutRef.current) clearTimeout(speakingTimeoutRef.current);
@@ -349,6 +375,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
           }
         },
         onClose: () => {
+          addLog("Session connection closed.");
           setIsActive(false);
           setIsConnecting(false);
           setAgentState('idle');
@@ -357,6 +384,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
         },
         onFunctionCall: async (fc) => {
           resetSilenceTimer();
+          addLog(`[TOOL] Calling: ${fc.name}`);
           
           if (fc.name === 'submit_report') {
              // Handle GET_PRODUCT_STOCK specifically to return data
@@ -370,11 +398,13 @@ const VoiceInterface: React.FC<VoiceProps> = ({
           if (fc.name === 'update_order_ui') {
             const newData = { ...formDataRef.current, ...fc.args };
             setFormData(newData);
-            formDataRef.current = newData; 
+            formDataRef.current = newData;
+            addLog(`[UI] Form updated: ${JSON.stringify(fc.args)}`); 
             return { status: "form_updated" };
           }
           
           if (fc.name === 'close_call') {
+            addLog("[TOOL] close_call requested");
             // Disconnect but keep finalSummary visible if it exists
             setTimeout(() => {
                if (sessionRef.current) sessionRef.current.disconnect();
@@ -384,6 +414,14 @@ const VoiceInterface: React.FC<VoiceProps> = ({
           }
 
           return { status: "unknown_tool" };
+        },
+        onVolume: (level) => {
+           setAudioLevel(level);
+           // If the user is speaking clearly (above 0.01), reset silence timer
+           // This prevents false "User silent" nudges while the user is actually speaking
+           if (level > 0.01) {
+             resetSilenceTimer();
+           }
         }
       }, {
         voiceName: voiceName,
@@ -393,8 +431,10 @@ const VoiceInterface: React.FC<VoiceProps> = ({
       setIsActive(true);
       setIsConnecting(false);
       onSessionStarted?.();
+      addLog("Session active.");
     } catch (err) {
       console.error("Failed to start session:", err);
+      addLog(`[ERROR] Start failed: ${err}`);
       setIsConnecting(false);
       setIsActive(false);
       setAgentState('idle');
@@ -406,6 +446,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
       if (bookingStatusRef.current !== 'confirmed') {
           callStatusRef.current = 'abandoned';
       }
+      addLog("User manually stopped session.");
       if (sessionRef.current) sessionRef.current.disconnect();
       setIsActive(false);
       setAgentState('idle');
@@ -456,7 +497,11 @@ const VoiceInterface: React.FC<VoiceProps> = ({
               <div className="relative w-40 h-40 flex items-center justify-center mb-4">
                  {isActive ? (
                     <>
-                     <div className={`absolute inset-0 rounded-full border-[3px] border-t-indigo-500 border-r-transparent border-b-zinc-800 border-l-transparent ${agentState === 'speaking' ? 'animate-spin duration-700' : 'animate-spin duration-[3000ms]'}`}></div>
+                     {/* Dynamic border based on volume */}
+                     <div 
+                        className={`absolute inset-0 rounded-full border-[3px] border-t-indigo-500 border-r-transparent border-b-zinc-800 border-l-transparent ${agentState === 'speaking' ? 'animate-spin duration-700' : 'animate-spin duration-[3000ms]'}`}
+                        style={{ transform: `scale(${1 + audioLevel * 3})` }}
+                     ></div>
                      <div className={`w-28 h-28 rounded-full bg-zinc-950 flex items-center justify-center border border-zinc-800 shadow-inner ${agentState === 'speaking' ? 'shadow-indigo-500/50' : ''}`}>
                         <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${agentState === 'speaking' ? 'bg-indigo-600 scale-110' : 'bg-zinc-800 scale-100'}`}>
                            <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -481,7 +526,7 @@ const VoiceInterface: React.FC<VoiceProps> = ({
 
            </div>
 
-           {/* RIGHT: FORM & LOG (UPDATED: Shows form by default) */}
+           {/* RIGHT: FORM / DEBUG AREA */}
            <div className="w-1/2 bg-zinc-950 p-0 overflow-hidden flex flex-col border-l border-zinc-800 relative">
               {finalSummary ? (
                  <div className="flex flex-col h-full animate-in slide-in-from-right duration-300 bg-zinc-900">
@@ -536,65 +581,93 @@ const VoiceInterface: React.FC<VoiceProps> = ({
                  <div className="flex flex-col h-full bg-zinc-900">
                     {/* FIXED HEADER FOR FORM - UPDATED STYLE */}
                     <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-2 flex justify-between items-center shrink-0">
-                       <h3 className="font-bold text-zinc-300 uppercase tracking-widest text-[10px]">{t.formTitle}</h3>
-                       <div className="text-[8px] bg-indigo-600 px-1.5 py-0.5 rounded text-white font-mono animate-pulse shadow-[0_0_10px_rgba(79,70,229,0.5)]">LIVE</div>
+                       <h3 className="font-bold text-zinc-300 uppercase tracking-widest text-[10px]">{activeView === 'form' ? t.formTitle : 'DEBUG LOGS'}</h3>
+                       <div className="flex items-center gap-2">
+                           <button 
+                             onClick={() => setActiveView(activeView === 'form' ? 'debug' : 'form')}
+                             className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider transition-colors ${activeView === 'debug' ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
+                           >
+                             {activeView === 'form' ? 'DEBUG' : 'FORM'}
+                           </button>
+                           <div className="text-[8px] bg-indigo-600 px-1.5 py-0.5 rounded text-white font-mono animate-pulse shadow-[0_0_10px_rgba(79,70,229,0.5)]">LIVE</div>
+                       </div>
                     </div>
                     
-                    {/* SCROLLABLE FORM AREA */}
-                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                       <div className="grid grid-cols-2 gap-2">
-                          <div>
-                             <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelName}</label>
-                             <div className={`bg-zinc-950 border p-1.5 rounded text-zinc-300 text-[10px] font-bold ${formData.name ? 'border-indigo-500/50 text-white' : 'border-zinc-800'}`}>{formData.name || "..."}</div>
-                          </div>
-                          <div>
-                             <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelPhone}</label>
-                             <div className={`bg-zinc-950 border p-1.5 rounded text-zinc-300 text-[10px] font-bold ${formData.phone ? 'border-indigo-500/50 text-white' : 'border-zinc-800'}`}>{formData.phone || "..."}</div>
-                          </div>
-                       </div>
-                       <div>
-                           <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelEmail}</label>
-                           <div className={`bg-zinc-950 border p-1.5 rounded text-zinc-300 text-[10px] font-bold ${formData.email ? 'border-indigo-500/50 text-white' : 'border-zinc-800'}`}>{formData.email || "..."}</div>
-                       </div>
-                       <div>
-                           <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelService}</label>
-                           <div className={`bg-zinc-950 border p-1.5 rounded text-indigo-400 text-[10px] font-bold ${formData.serviceName ? 'border-indigo-500/50' : 'border-zinc-800'}`}>{formData.serviceName || "..."}</div>
-                       </div>
-                       <div>
-                           <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelVehicle}</label>
-                           <div className={`bg-zinc-950 border p-2 rounded text-zinc-400 text-[9px] min-h-[50px] ${formData.comments ? 'border-indigo-500/50 text-zinc-300' : 'border-zinc-800'}`}>{formData.comments || "..."}</div>
-                       </div>
+                    {/* VIEW SWITCHER */}
+                    {activeView === 'form' ? (
+                        <>
+                            {/* SCROLLABLE FORM AREA */}
+                            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelName}</label>
+                                    <div className={`bg-zinc-950 border p-1.5 rounded text-zinc-300 text-[10px] font-bold ${formData.name ? 'border-indigo-500/50 text-white' : 'border-zinc-800'}`}>{formData.name || "..."}</div>
+                                </div>
+                                <div>
+                                    <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelPhone}</label>
+                                    <div className={`bg-zinc-950 border p-1.5 rounded text-zinc-300 text-[10px] font-bold ${formData.phone ? 'border-indigo-500/50 text-white' : 'border-zinc-800'}`}>{formData.phone || "..."}</div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelEmail}</label>
+                                <div className={`bg-zinc-950 border p-1.5 rounded text-zinc-300 text-[10px] font-bold ${formData.email ? 'border-indigo-500/50 text-white' : 'border-zinc-800'}`}>{formData.email || "..."}</div>
+                            </div>
+                            <div>
+                                <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelService}</label>
+                                <div className={`bg-zinc-950 border p-1.5 rounded text-indigo-400 text-[10px] font-bold ${formData.serviceName ? 'border-indigo-500/50' : 'border-zinc-800'}`}>{formData.serviceName || "..."}</div>
+                            </div>
+                            <div>
+                                <label className="text-[8px] text-zinc-500 font-bold uppercase block mb-0.5">{t.labelVehicle}</label>
+                                <div className={`bg-zinc-950 border p-2 rounded text-zinc-400 text-[9px] min-h-[50px] ${formData.comments ? 'border-indigo-500/50 text-zinc-300' : 'border-zinc-800'}`}>{formData.comments || "..."}</div>
+                            </div>
 
-                       {/* CONFIRMATION BUTTON - Only shows if data is present and call is active */}
-                       {canConfirm && (
-                         <div className="pt-2 animate-in fade-in duration-500">
-                           <button 
-                             onClick={handleManualConfirm}
-                             className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/40 border border-indigo-500 active:scale-95 transition-all flex items-center justify-center gap-2"
-                           >
-                             <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                             </svg>
-                             {t.confirmBtn}
-                           </button>
-                         </div>
-                       )}
-                    </div>
+                            {/* CONFIRMATION BUTTON - Only shows if data is present and call is active */}
+                            {canConfirm && (
+                                <div className="pt-2 animate-in fade-in duration-500">
+                                <button 
+                                    onClick={handleManualConfirm}
+                                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-900/40 border border-indigo-500 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    {t.confirmBtn}
+                                </button>
+                                </div>
+                            )}
+                            </div>
 
-                    {/* MINI TRANSCRIPT LOG AT BOTTOM */}
-                    <div className="shrink-0 bg-zinc-950 border-t border-zinc-800 p-2 max-h-[80px] overflow-hidden flex flex-col justify-end">
-                       <div className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest mb-1">Transcript</div>
-                       <div ref={scrollRef} className="text-[9px] font-mono space-y-1 overflow-y-auto scrollbar-hide">
-                         {transcripts.slice(-3).map((t, i) => (
-                           <div key={i} className={`flex ${t.type === 'input' ? 'justify-end' : 'justify-start'}`}>
-                              <span className={`${t.type === 'input' ? 'text-zinc-500' : 'text-indigo-400'} truncate max-w-full`}>
-                                {t.type === 'output' && '> '} {t.text}
-                              </span>
+                            {/* MINI TRANSCRIPT LOG AT BOTTOM */}
+                            <div className="shrink-0 bg-zinc-950 border-t border-zinc-800 p-2 max-h-[80px] overflow-hidden flex flex-col justify-end">
+                            <div className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest mb-1">Transcript</div>
+                            <div ref={scrollRef} className="text-[9px] font-mono space-y-1 overflow-y-auto scrollbar-hide">
+                                {transcripts.slice(-3).map((t, i) => (
+                                <div key={i} className={`flex ${t.type === 'input' ? 'justify-end' : 'justify-start'}`}>
+                                    <span className={`${t.type === 'input' ? 'text-zinc-500' : 'text-indigo-400'} truncate max-w-full`}>
+                                        {t.type === 'output' && '> '} {t.text}
+                                    </span>
+                                </div>
+                                ))}
+                                {transcripts.length === 0 && <span className="text-zinc-700 italic">Listening...</span>}
+                            </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 overflow-hidden bg-black p-2 font-mono text-[9px]">
+                           <div className="h-full overflow-y-auto scrollbar-hide space-y-1" ref={debugScrollRef}>
+                              {debugLogs.length === 0 && <span className="text-zinc-600 italic">No logs yet...</span>}
+                              {debugLogs.map((log, i) => {
+                                 const isError = log.includes("Error") || log.includes("failed");
+                                 const isAction = log.includes("[ACTION]") || log.includes("[WEBHOOK]") || log.includes("[TOOL]");
+                                 return (
+                                     <div key={i} className={`break-words border-l-2 pl-2 ${isError ? 'border-red-500 text-red-400' : isAction ? 'border-yellow-500 text-yellow-100' : 'border-zinc-700 text-zinc-400'}`}>
+                                       {log}
+                                     </div>
+                                 )
+                              })}
                            </div>
-                         ))}
-                         {transcripts.length === 0 && <span className="text-zinc-700 italic">Listening...</span>}
-                       </div>
-                    </div>
+                        </div>
+                    )}
                  </div>
               )}
            </div>
